@@ -96,60 +96,56 @@ BUTTONS = InlineKeyboardMarkup(
 )
 
 async def skip_current_song(chat_id):
-    if chat_id in QUEUE:
-        chat_queue = get_queue(chat_id)
-        if len(chat_queue) == 1:
-            await app.leave_group_call(chat_id)
-            clear_queue(chat_id)
-            return 1
-        else:
-            title = chat_queue[1][0]
-            duration = chat_queue[1][1]
-            link = chat_queue[1][2]
-            playlink = chat_queue[1][3]
-            type = chat_queue[1][4]
-            Q = chat_queue[1][5]
-            thumb = chat_queue[1][6]
-            if type == "Audio":
-                await app.change_stream(
-                    chat_id,
-                    AudioPiped(
-                        playlink,
-                    ),
-                )
-            elif type == "Video":
-                if Q == "high":
-                    hm = HighQualityVideo()
-                elif Q == "mid":
-                    hm = MediumQualityVideo()
-                elif Q == "low":
-                    hm = LowQualityVideo()
-                else:
-                    hm = MediumQualityVideo()
-                await app.change_stream(
-                    chat_id, AudioVideoPiped(playlink, HighQualityAudio(), hm)
-                )
-            pop_an_item(chat_id)
-            await bot.send_photo(chat_id, photo = thumb,
-                                 caption = f"▶️ <b>Now playing:</b> [{title}]({link}) | `{type}` \n\n⏳ <b>Duration:</b> {duration}",
-                                 reply_markup = BUTTONS)
-            return [title, link, type, duration, thumb]
-    else:
+    if chat_id not in QUEUE:
         return 0
+    chat_queue = get_queue(chat_id)
+    if len(chat_queue) == 1:
+        await app.leave_group_call(chat_id)
+        clear_queue(chat_id)
+        return 1
+    else:
+        title = chat_queue[1][0]
+        duration = chat_queue[1][1]
+        link = chat_queue[1][2]
+        playlink = chat_queue[1][3]
+        type = chat_queue[1][4]
+        Q = chat_queue[1][5]
+        thumb = chat_queue[1][6]
+        if type == "Audio":
+            await app.change_stream(
+                chat_id,
+                AudioPiped(
+                    playlink,
+                ),
+            )
+        elif type == "Video":
+            if Q == "high":
+                hm = HighQualityVideo()
+            elif Q == "mid" or Q != "low":
+                hm = MediumQualityVideo()
+            else:
+                hm = LowQualityVideo()
+            await app.change_stream(
+                chat_id, AudioVideoPiped(playlink, HighQualityAudio(), hm)
+            )
+        pop_an_item(chat_id)
+        await bot.send_photo(chat_id, photo = thumb,
+                             caption = f"▶️ <b>Now playing:</b> [{title}]({link}) | `{type}` \n\n⏳ <b>Duration:</b> {duration}",
+                             reply_markup = BUTTONS)
+        return [title, link, type, duration, thumb]
 
 
 async def skip_item(chat_id, lol):
-    if chat_id in QUEUE:
-        chat_queue = get_queue(chat_id)
-        try:
-            x = int(lol)
-            title = chat_queue[x][0]
-            chat_queue.pop(x)
-            return title
-        except Exception as e:
-            print(e)
-            return 0
-    else:
+    if chat_id not in QUEUE:
+        return 0
+    chat_queue = get_queue(chat_id)
+    try:
+        x = int(lol)
+        title = chat_queue[x][0]
+        chat_queue.pop(x)
+        return title
+    except Exception as e:
+        print(e)
         return 0
 
 
@@ -206,19 +202,16 @@ async def callbacks(_, cq: CallbackQuery):
     try:
         user = await cq.message.chat.get_member(user_id)
         admin_strings = ("creator", "administrator")
-        if user.status not in admin_strings:
-            is_admin = False
-        else:
-            is_admin = True
+        is_admin = user.status in admin_strings
     except ValueError:
-        is_admin = True        
+        is_admin = True
     if not is_admin:
-        return await cq.answer("You aren't an admin.")   
+        return await cq.answer("You aren't an admin.")
     chat_id = cq.message.chat.id
     data = cq.data
     if data == "close":
         return await cq.message.delete()
-    if not chat_id in QUEUE:
+    if chat_id not in QUEUE:
         return await cq.answer("Nothing is playing.")
 
     if data == "pause":
@@ -227,7 +220,7 @@ async def callbacks(_, cq: CallbackQuery):
             await cq.answer("Paused streaming.")
         except:
             await cq.answer("Nothing is playing.")
-      
+
     elif data == "resume":
         try:
             await app.resume_stream(chat_id)
@@ -246,14 +239,14 @@ async def callbacks(_, cq: CallbackQuery):
             await cq.answer("Muted streaming.")
         except:
             await cq.answer("Nothing is playing.")
-            
+
     elif data == "unmute":
         try:
             await app.unmute_stream(chat_id)
             await cq.answer("Unmuted streaming.")
         except:
             await cq.answer("Nothing is playing.")
-            
+
     elif data == "skip":
         op = await skip_current_song(chat_id)
         if op == 0:
@@ -288,7 +281,7 @@ async def video_play(_, message):
     chat_id = message.chat.id
     if chat_id in LIVE_CHATS:
         return await message.reply_text("❗️Please send <code>/stop</code> to end current live streaming before play songs or videos.")
-    
+
     m = await message.reply_text("🔄 Processing...")
     if state == "play":
         damn = AudioPiped
@@ -326,14 +319,13 @@ async def video_play(_, message):
                 return await m.edit("❗️YTDL ERROR !!!")               
     except Exception as e:
         return await m.edit(str(e))
-    
+
     try:
         if chat_id in QUEUE:
             position = add_to_queue(chat_id, yt.title, duration, link, playlink, doom, Q, thumb)
             caps = f"#️⃣ [{yt.title}]({link}) <b>queued at position {position}</b> \n\n⏳ <b>Duration:</b> {duration}"
             await message.reply_photo(thumb, caption=caps)
-            await m.delete()
-        else:            
+        else:    
             await app.join_group_call(
                 chat_id,
                 damn(playlink),
@@ -341,7 +333,7 @@ async def video_play(_, message):
             )
             add_to_queue(chat_id, yt.title, duration, link, playlink, doom, Q, thumb)
             await message.reply_photo(thumb, caption=cap, reply_markup=BUTTONS)
-            await m.delete()
+        await m.delete()
     except Exception as e:
         return await m.edit(str(e))
     
@@ -402,13 +394,9 @@ async def skip(_, message):
             items = [int(x) for x in skip.split(" ") if x.isdigit()]
             items.sort(reverse=True)
             for x in items:
-                if x == 0:
-                    pass
-                else:
+                if x != 0:
                     hm = await skip_item(chat_id, x)
-                    if hm == 0:
-                        pass
-                    else:
+                    if hm != 0:
                         out = out + "\n" + f"<b>#️⃣ {x}</b> - {hm}"
             await message.reply_text(out)
             
